@@ -1,0 +1,36 @@
+rules:
+  - id: CTR-001
+    name: "Large Cash Transaction"
+    type: CTR
+    severity: HIGH
+    conditions:
+      - field: amount
+        operator: GTE
+        value: 10000
+      - field: channel
+        operator: IN
+        value: [ATM, BRANCH]
+    actions:
+      - type: ALERT
+        template: "Large cash transaction: ${amount} via ${channel}"
+
+  - id: SAR-001
+    name: "Structuring Detection"
+    type: SAR
+    severity: HIGH
+    window: 24h
+    conditions:
+      - field: txn_count_24h
+        operator: GTE
+        value: 5
+      - field: max_single_amount
+        operator: LT
+        value: 10000
+      - field: total_amount_24h
+        operator: GTE
+        value: 40000
+    actions:
+      - type: ALERT
+        template: "Potential structuring: ${txn_count_24h} transactions totaling ${total_amount_24h}"
+      - type: ESCALATE
+        priority: HIGH
