@@ -8,6 +8,7 @@ object SummaryReportJob {
 
   def main(args: Array[String]): Unit = {
     val reportDate = if (args.length > 0) args(0) else LocalDate.now().minusDays(1).toString
+    require(reportDate.matches("\\d{4}-\\d{2}-\\d{2}"), "reportDate must be in YYYY-MM-DD format")
     val spark = SparkSession.builder()
       .appName("AML-SummaryReport")
       .enableHiveSupport()
