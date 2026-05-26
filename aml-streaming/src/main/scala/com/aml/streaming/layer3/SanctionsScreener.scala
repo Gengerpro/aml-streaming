@@ -45,11 +45,7 @@ class SanctionsScreener(
       .headOption
   }
 
-  private def normalize(name: String): String = {
-    name.trim.toLowerCase
-      .replaceAll("[^a-z0-9\\s]", "")
-      .replaceAll("\\s+", " ")
-  }
+  private def normalize(name: String): String = SanctionsScreener.normalize(name)
 
   // Jaro-Winkler similarity implementation
   def jaroWinkler(s1: String, s2: String): Double = {
@@ -98,13 +94,19 @@ class SanctionsScreener(
 }
 
 object SanctionsScreener {
+  def normalize(name: String): String = {
+    name.trim.toLowerCase
+      .replaceAll("[^a-z0-9\\s]", "")
+      .replaceAll("\\s+", " ")
+  }
+
   def create(sanctionedNames: List[String]): SanctionsScreener = {
     val bloomFilter = BloomFilter.create[CharSequence](
       Funnels.stringFunnel(StandardCharsets.UTF_8),
       sanctionedNames.size * 10,
       0.001
     )
-    sanctionedNames.foreach(name => bloomFilter.put(name.toLowerCase.trim))
+    sanctionedNames.foreach(name => bloomFilter.put(normalize(name)))
     new SanctionsScreener(sanctionedNames, bloomFilter)
   }
 }
