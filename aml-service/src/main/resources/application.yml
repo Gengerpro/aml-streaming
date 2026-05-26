@@ -1,0 +1,25 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: aml-service
+
+aml:
+  clickhouse:
+    jdbc-url: jdbc:clickhouse://localhost:8123/aml
+    username: default
+    password: ""
+    database: aml
+  hbase:
+    zookeeper-quorum: localhost
+    zookeeper-port: 2181
+    table-name: aml_customers
+  rule-engine:
+    rule-store-path: /aml/rules
+    refresh-interval-seconds: 60
+    ctr-threshold: 10000
+
+logging:
+  level:
+    com.aml: DEBUG
