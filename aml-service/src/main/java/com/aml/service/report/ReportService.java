@@ -105,19 +105,29 @@ public class ReportService {
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
             "<FATFReport xmlns=\"urn:fatf:report:1.0\">\n" +
             "  <ReportHeader>\n" +
-            "    <ReportType>" + reportType + "</ReportType>\n" +
-            "    <ReportId>" + reportId + "</ReportId>\n" +
+            "    <ReportType>" + escapeXml(reportType) + "</ReportType>\n" +
+            "    <ReportId>" + escapeXml(reportId) + "</ReportId>\n" +
             "    <SubmissionDate>" + date + "</SubmissionDate>\n" +
             "  </ReportHeader>\n" +
             "  <ReportBody>\n" +
             "    <Subject>\n" +
-            "      <CustomerId>" + customerId + "</CustomerId>\n" +
+            "      <CustomerId>" + escapeXml(customerId) + "</CustomerId>\n" +
             "    </Subject>\n" +
             "    <Transaction>\n" +
-            "      <Amount currency=\"" + currency + "\">" + amount + "</Amount>\n" +
-            "      <Channel>" + channel + "</Channel>\n" +
+            "      <Amount currency=\"" + escapeXml(currency) + "\">" + escapeXml(amount) + "</Amount>\n" +
+            "      <Channel>" + escapeXml(channel) + "</Channel>\n" +
             "    </Transaction>\n" +
             "  </ReportBody>\n" +
             "</FATFReport>";
+    }
+
+    private String escapeXml(String value) {
+        if (value == null) return "";
+        return value
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&apos;");
     }
 }
