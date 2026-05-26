@@ -4,8 +4,26 @@ import com.aml.common.config.AppConfig
 import org.apache.spark.sql.{SparkSession, DataFrame}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.expressions.UserDefinedFunction
 
 object AlertAggregationJob {
+
+  /** Map severity string to numeric order (matching AlertDeduplicator). */
+  val severityToNum: UserDefinedFunction = udf((s: String) => s match {
+    case "LOW"      => 0
+    case "MEDIUM"   => 1
+    case "HIGH"     => 2
+    case "CRITICAL" => 3
+    case _          => -1
+  })
+
+  /** Map numeric severity order back to string. */
+  val numToSeverity: UserDefinedFunction = udf((n: Int) => n match {
+    case 3 => "CRITICAL"
+    case 2 => "HIGH"
+    case 1 => "MEDIUM"
+    case _ => "LOW"
+  })
 
   def main(args: Array[String]): Unit = {
     val config = AppConfig.load()
@@ -55,15 +73,19 @@ object AlertAggregationJob {
       .agg(
         first("alert_id").as("alert_id"),
         first("txnId").as("txnId"),
-        max("severity").as("severity"),
+        max(severityToNum(col("severity"))).as("severity_num"),
         first("alert_type").as("alert_type"),
         first("rule_desc").as("rule_desc"),
         max("score").as("score"),
-        count("*").as("alert_count"),
         min("created_at").as("created_at")
       )
+      .withColumn("severity", numToSeverity(col("severity_num")))
+      .drop("severity_num")
       .withColumn("status", lit("NEW"))
       .withColumn("updated_at", current_timestamp())
+      // Rename camelCase Kafka fields to snake_case to match ClickHouse schema
+      .withColumnRenamed("txnId", "txn_id")
+      .withColumnRenamed("customerId", "customer_id")
 
     // Write to ClickHouse via JDBC
     val query = deduplicated.writeStream
