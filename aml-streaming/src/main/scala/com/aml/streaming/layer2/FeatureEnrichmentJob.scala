@@ -3,9 +3,48 @@ package com.aml.streaming.layer2
 import com.aml.common.config.AppConfig
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout}
 import org.apache.spark.sql.types._
 
+// Domain case classes used for stateful mapGroupsWithState processing
+case class RawTransaction(
+  txnId: String,
+  txn_type_normalized: String,
+  timestamp: Long,
+  amountUsd: BigDecimal,
+  counterpartyId: String,
+  customerId: String,
+  process_ts: java.sql.Timestamp
+)
+
+case class TxnAggState(
+  buffer: Seq[RawTransaction],
+  lastUpdatedMs: Long
+)
+
+case class EnrichedTransaction(
+  txnId: String,
+  txn_type_normalized: String,
+  timestamp: Long,
+  amountUsd: BigDecimal,
+  counterpartyId: String,
+  customerId: String,
+  txn_count_1h: Long,
+  total_amount_1h: BigDecimal,
+  max_amount_1h: BigDecimal,
+  unique_counterparties_1h: Long,
+  txn_count_24h: Long,
+  total_amount_24h: BigDecimal,
+  max_amount_24h: BigDecimal,
+  unique_counterparties_24h: Long,
+  enriched_ts: java.sql.Timestamp
+)
+
 object FeatureEnrichmentJob {
+
+  private val WINDOW_1H_MS  = 3600000L      // 1 hour in ms
+  private val WINDOW_24H_MS = 86400000L     // 24 hours in ms
+  private val MAX_STATE_AGE = WINDOW_24H_MS * 2 // evict state idle > 48h
 
   def main(args: Array[String]): Unit = {
     val config = AppConfig.load()
@@ -50,45 +89,28 @@ object FeatureEnrichmentJob {
       .select(from_json(col("json_str"), txnSchema).as("txn"))
       .select("txn.*")
 
-    // Window aggregations by customer_id
-    val withWatermark = txns
-      .withWatermark("process_ts", "1 hour")
-
-    // 1-hour window aggregation
-    val windowed1h = withWatermark
-      .groupBy(
-        col("customerId"),
-        window(col("process_ts"), "1 hour")
-      )
-      .agg(
-        count("*").as("txn_count_1h"),
-        sum("amountUsd").as("total_amount_1h"),
-        max("amountUsd").as("max_amount_1h"),
-        countDistinct("counterpartyId").as("unique_counterparties_1h")
-      )
-
-    // 24-hour window aggregation
-    val windowed24h = withWatermark
-      .groupBy(
-        col("customerId"),
-        window(col("process_ts"), "24 hours")
-      )
-      .agg(
-        count("*").as("txn_count_24h"),
-        sum("amountUsd").as("total_amount_24h"),
-        max("amountUsd").as("max_amount_24h"),
-        countDistinct("counterpartyId").as("unique_counterparties_24h")
-      )
-
-    // Join original transaction with window features
+    // Key by customerId and apply stateful per-customer rolling aggregation.
+    // This replaces the broken windowed-join approach (which produced a Cartesian
+    // product by joining on customerId alone) with mapGroupsWithState that
+    // maintains a bounded buffer of recent transactions per customer and computes
+    // rolling 1h and 24h aggregates directly for each incoming transaction.
     val enriched = txns
-      .join(windowed1h, Seq("customerId"), "left")
-      .join(windowed24h, Seq("customerId"), "left")
-      .withColumn("enriched_ts", current_timestamp())
-      .selectExpr("to_json(struct(*)) AS value")
+      .select(
+        col("txnId"),
+        col("txn_type_normalized"),
+        col("timestamp"),
+        col("amountUsd").cast(DecimalType(18, 2)).as("amountUsd"),
+        col("counterpartyId"),
+        col("customerId"),
+        col("process_ts")
+      )
+      .as[RawTransaction]
+      .groupByKey(_.customerId)
+      .mapGroupsWithState(GroupStateTimeout.NoTimeout)(updateState)
+      .flatMap(identity)
 
-    // Write to enriched topic
     val query = enriched
+      .selectExpr("to_json(struct(*)) AS value")
       .writeStream
       .format("kafka")
       .option("kafka.bootstrap.servers", config.kafka.bootstrapServers)
@@ -98,5 +120,57 @@ object FeatureEnrichmentJob {
       .start()
 
     query.awaitTermination()
+  }
+
+  /** Stateful function: computes rolling 1h/24h aggregates per customer. */
+  private def updateState(
+    customerId: String,
+    txns: Iterator[RawTransaction],
+    state: GroupState[TxnAggState]
+  ): Iterator[EnrichedTransaction] = {
+
+    // Evict stale state (no activity for 2x the largest window)
+    if (state.exists && !state.hasTimedOut) {
+      val age = System.currentTimeMillis() - state.get.lastUpdatedMs
+      if (age > MAX_STATE_AGE) state.remove()
+    }
+
+    val existing: Seq[RawTransaction] =
+      if (state.exists) state.get.buffer else Seq.empty
+
+    val nowMs = System.currentTimeMillis()
+
+    // Append new transactions and evict entries older than 24h
+    val updatedBuffer = (existing ++ txns)
+      .filter(t => nowMs - t.process_ts.getTime < WINDOW_24H_MS)
+
+    val newState = TxnAggState(updatedBuffer, nowMs)
+    state.update(newState)
+
+    // Emit one EnrichedTransaction per incoming transaction
+    txns.map { txn =>
+      val txnTime = txn.process_ts.getTime
+
+      val recent1h = updatedBuffer.filter(t => txnTime - t.process_ts.getTime < WINDOW_1H_MS)
+      val recent24h = updatedBuffer.filter(t => txnTime - t.process_ts.getTime < WINDOW_24H_MS)
+
+      EnrichedTransaction(
+        txnId = txn.txnId,
+        txn_type_normalized = txn.txn_type_normalized,
+        timestamp = txn.timestamp,
+        amountUsd = txn.amountUsd,
+        counterpartyId = txn.counterpartyId,
+        customerId = txn.customerId,
+        txn_count_1h               = recent1h.size.toLong,
+        total_amount_1h            = recent1h.map(_.amountUsd).sum,
+        max_amount_1h              = if (recent1h.nonEmpty) recent1h.map(_.amountUsd).max else BigDecimal(0),
+        unique_counterparties_1h   = recent1h.map(_.counterpartyId).distinct.size.toLong,
+        txn_count_24h              = recent24h.size.toLong,
+        total_amount_24h           = recent24h.map(_.amountUsd).sum,
+        max_amount_24h             = if (recent24h.nonEmpty) recent24h.map(_.amountUsd).max else BigDecimal(0),
+        unique_counterparties_24h  = recent24h.map(_.counterpartyId).distinct.size.toLong,
+        enriched_ts = new java.sql.Timestamp(nowMs)
+      )
+    }
   }
 }
