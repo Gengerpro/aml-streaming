@@ -1,7 +1,9 @@
 package com.aml.service.kyc;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -16,7 +18,7 @@ public class KycService {
 
     public KycEntity getProfile(String customerId) {
         return kycRepository.findById(customerId)
-            .orElseThrow(() -> new RuntimeException("KYC profile not found: " + customerId));
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "KYC profile not found: " + customerId));
     }
 
     public List<KycEntity> getHighRiskCustomers() {

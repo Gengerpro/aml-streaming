@@ -36,10 +36,18 @@ public class CaseController {
     }
 
     @PostMapping
-    public ResponseEntity<CaseEntity> createCase(@RequestBody Map<String, Object> request) {
+    public ResponseEntity<?> createCase(@RequestBody Map<String, Object> request) {
+        String customerId = request.get("customerId") != null ? request.get("customerId").toString() : null;
+        String title = request.get("title") != null ? request.get("title").toString() : null;
+        if (customerId == null || customerId.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "customerId is required"));
+        }
+        if (title == null || title.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "title is required"));
+        }
         return ResponseEntity.ok(caseService.createCase(
-            request.get("customerId").toString(),
-            request.get("title").toString(),
+            customerId,
+            title,
             request.getOrDefault("description", "").toString(),
             request.getOrDefault("priority", "MEDIUM").toString(),
             request.getOrDefault("createdBy", "system").toString(),
@@ -48,10 +56,14 @@ public class CaseController {
     }
 
     @PostMapping("/{caseId}/assign")
-    public ResponseEntity<CaseEntity> assignCase(
+    public ResponseEntity<?> assignCase(
             @PathVariable String caseId,
             @RequestBody Map<String, String> request) {
-        return ResponseEntity.ok(caseService.assignCase(caseId, request.get("assignee")));
+        String assignee = request.get("assignee");
+        if (assignee == null || assignee.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "assignee is required"));
+        }
+        return ResponseEntity.ok(caseService.assignCase(caseId, assignee));
     }
 
     @PostMapping("/{caseId}/update")
@@ -67,9 +79,13 @@ public class CaseController {
     }
 
     @PostMapping("/{caseId}/escalate")
-    public ResponseEntity<CaseEntity> escalateCase(
+    public ResponseEntity<?> escalateCase(
             @PathVariable String caseId,
             @RequestBody Map<String, String> request) {
-        return ResponseEntity.ok(caseService.escalateCase(caseId, request.get("reason")));
+        String reason = request.get("reason");
+        if (reason == null || reason.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "reason is required"));
+        }
+        return ResponseEntity.ok(caseService.escalateCase(caseId, reason));
     }
 }

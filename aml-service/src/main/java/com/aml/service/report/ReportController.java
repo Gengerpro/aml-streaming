@@ -31,10 +31,18 @@ public class ReportController {
     }
 
     @PostMapping("/ctr")
-    public ResponseEntity<ReportEntity> generateCtrReport(@RequestBody Map<String, String> request) {
+    public ResponseEntity<?> generateCtrReport(@RequestBody Map<String, String> request) {
+        String customerId = request.get("customerId");
+        String alertId = request.get("alertId");
+        if (customerId == null || customerId.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "customerId is required"));
+        }
+        if (alertId == null || alertId.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "alertId is required"));
+        }
         return ResponseEntity.ok(reportService.generateCtrReport(
-            request.get("alertId"),
-            request.get("customerId"),
+            alertId,
+            customerId,
             request.get("amount"),
             request.get("currency"),
             request.get("channel")
@@ -42,10 +50,18 @@ public class ReportController {
     }
 
     @PostMapping("/sar")
-    public ResponseEntity<ReportEntity> generateSarReport(@RequestBody Map<String, String> request) {
+    public ResponseEntity<?> generateSarReport(@RequestBody Map<String, String> request) {
+        String customerId = request.get("customerId");
+        String alertId = request.get("alertId");
+        if (customerId == null || customerId.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "customerId is required"));
+        }
+        if (alertId == null || alertId.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "alertId is required"));
+        }
         return ResponseEntity.ok(reportService.generateSarReport(
-            request.get("alertId"),
-            request.get("customerId"),
+            alertId,
+            customerId,
             request.get("amount"),
             request.get("currency"),
             request.get("channel"),
@@ -64,12 +80,16 @@ public class ReportController {
     }
 
     @PostMapping("/{reportId}/status")
-    public ResponseEntity<ReportEntity> updateStatus(
+    public ResponseEntity<?> updateStatus(
             @PathVariable String reportId,
             @RequestBody Map<String, String> request) {
+        String status = request.get("status");
+        if (status == null || status.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "status is required"));
+        }
         return ResponseEntity.ok(reportService.updateSubmissionStatus(
             reportId,
-            request.get("status"),
+            status,
             request.get("submissionId")
         ));
     }

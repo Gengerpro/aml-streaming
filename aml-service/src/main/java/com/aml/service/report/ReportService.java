@@ -1,7 +1,9 @@
 package com.aml.service.report;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -19,7 +21,7 @@ public class ReportService {
 
     public ReportEntity getReport(String reportId) {
         return reportRepository.findById(reportId)
-            .orElseThrow(() -> new RuntimeException("Report not found: " + reportId));
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Report not found: " + reportId));
     }
 
     public List<ReportEntity> getReportsByType(String reportType) {

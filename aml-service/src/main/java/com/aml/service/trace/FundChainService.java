@@ -1,8 +1,13 @@
 package com.aml.service.trace;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import javax.sql.DataSource;
 import java.sql.*;
 import java.util.*;
 
@@ -16,6 +21,8 @@ import java.util.*;
 @Service
 public class FundChainService {
 
+    private static final Logger logger = LoggerFactory.getLogger(FundChainService.class);
+
     @Value("${aml.clickhouse.jdbc-url}")
     private String clickhouseUrl;
 
@@ -24,6 +31,8 @@ public class FundChainService {
 
     @Value("${aml.clickhouse.password:}")
     private String clickhousePassword;
+
+    private volatile DataSource clickhouseDataSource;
 
     private static final int DEFAULT_MAX_HOPS = 5;
     private static final int DEFAULT_MAX_RESULTS = 100;
@@ -139,12 +148,31 @@ public class FundChainService {
             }
         } catch (SQLException e) {
             // Log and return empty - don't fail the whole request for trace issues
-            System.err.println("Fund chain query failed: " + e.getMessage());
+            logger.error("Fund chain query failed", e);
         }
         return results;
     }
 
     private Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(clickhouseUrl, clickhouseUser, clickhousePassword);
+        return getDataSource().getConnection();
+    }
+
+    private DataSource getDataSource() {
+        if (clickhouseDataSource == null) {
+            synchronized (this) {
+                if (clickhouseDataSource == null) {
+                    HikariConfig config = new HikariConfig();
+                    config.setJdbcUrl(clickhouseUrl);
+                    config.setUsername(clickhouseUser);
+                    config.setPassword(clickhousePassword);
+                    config.setMaximumPoolSize(5);
+                    config.setConnectionTimeout(10000);
+                    config.setPoolName("clickhouse-pool");
+                    clickhouseDataSource = new HikariDataSource(config);
+                    logger.info("ClickHouse connection pool initialized: {}", clickhouseUrl);
+                }
+            }
+        }
+        return clickhouseDataSource;
     }
 }

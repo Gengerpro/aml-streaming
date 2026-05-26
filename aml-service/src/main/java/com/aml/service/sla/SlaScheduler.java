@@ -32,8 +32,8 @@ public class SlaScheduler {
         this.alertRepository = alertRepository;
     }
 
-    // Run every 60 seconds
-    @Scheduled(fixedRate = 60000)
+    // Run every 60 seconds (fixedDelay prevents overlapping executions)
+    @Scheduled(fixedDelay = 60000)
     @Transactional
     public void checkSlaCompliance() {
         List<AlertEntity> newAlerts = alertRepository.findByStatus("NEW");
