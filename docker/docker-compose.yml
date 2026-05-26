@@ -60,9 +60,9 @@ services:
     container_name: aml-hbase
     ports:
       - "16010:16010"
-      - "2181:2181"
+      - "16020:16020"
     environment:
-      HBASE_ZOOKEEPER_QUORUM: localhost
+      HBASE_ZOOKEEPER_QUORUM: zookeeper
 
   hive:
     image: apache/hive:3.1.3
