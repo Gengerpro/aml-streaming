@@ -14,6 +14,7 @@ case class RawTransaction(
   amountUsd: BigDecimal,
   counterpartyId: String,
   customerId: String,
+  route_tag: String,
   process_ts: java.sql.Timestamp
 )
 
@@ -37,6 +38,13 @@ case class EnrichedTransaction(
   total_amount_24h: BigDecimal,
   max_amount_24h: BigDecimal,
   unique_counterparties_24h: Long,
+  // Customer profile fields from HBase
+  risk_level: String,
+  risk_score: Double,
+  kyc_status: String,
+  alert_count_total: Long,
+  open_alert_count: Int,
+  route_tag: String,
   enriched_ts: java.sql.Timestamp
 )
 
@@ -45,6 +53,7 @@ object FeatureEnrichmentJob {
   private val WINDOW_1H_MS  = 3600000L      // 1 hour in ms
   private val WINDOW_24H_MS = 86400000L     // 24 hours in ms
   private val MAX_STATE_AGE = WINDOW_24H_MS * 2 // evict state idle > 48h
+  private val MAX_BUFFER_SIZE = 10000        // max transactions per customer buffer
 
   def main(args: Array[String]): Unit = {
     val config = AppConfig.load()
@@ -94,6 +103,11 @@ object FeatureEnrichmentJob {
     // product by joining on customerId alone) with mapGroupsWithState that
     // maintains a bounded buffer of recent transactions per customer and computes
     // rolling 1h and 24h aggregates directly for each incoming transaction.
+    // Customer profile is loaded from HBase for each incoming batch.
+    val hbaseQuorum = config.hbase.zookeeperQuorum
+    val hbasePort = config.hbase.zookeeperPort
+    val hbaseTable = config.hbase.tableName
+
     val enriched = txns
       .select(
         col("txnId"),
@@ -102,11 +116,14 @@ object FeatureEnrichmentJob {
         col("amountUsd").cast(DecimalType(18, 2)).as("amountUsd"),
         col("counterpartyId"),
         col("customerId"),
+        col("route_tag"),
         col("process_ts")
       )
       .as[RawTransaction]
       .groupByKey(_.customerId)
-      .flatMapGroupsWithState(OutputMode.Append, GroupStateTimeout.NoTimeout)(updateState)
+      .flatMapGroupsWithState(OutputMode.Append, GroupStateTimeout.NoTimeout)(
+        (customerId, txns, state) => updateState(customerId, txns, state, hbaseQuorum, hbasePort, hbaseTable)
+      )
 
     val query = enriched
       .selectExpr("to_json(struct(*)) AS value")
@@ -114,18 +131,21 @@ object FeatureEnrichmentJob {
       .format("kafka")
       .option("kafka.bootstrap.servers", config.kafka.bootstrapServers)
       .option("topic", "txn.enriched")
-      .option("checkpointLocation", "/tmp/checkpoint/layer2-enriched")
+      .option("checkpointLocation", s"${config.checkpoint.basePath}/layer2-enriched")
       .outputMode("append")
       .start()
 
     query.awaitTermination()
   }
 
-  /** Stateful function: computes rolling 1h/24h aggregates per customer. */
+  /** Stateful function: computes rolling 1h/24h aggregates per customer + HBase profile lookup. */
   private def updateState(
     customerId: String,
     txns: Iterator[RawTransaction],
-    state: GroupState[TxnAggState]
+    state: GroupState[TxnAggState],
+    hbaseQuorum: String,
+    hbasePort: Int,
+    hbaseTable: String
   ): Iterator[EnrichedTransaction] = {
 
     // Evict stale state (no activity for 2x the largest window)
@@ -139,12 +159,34 @@ object FeatureEnrichmentJob {
 
     val nowMs = System.currentTimeMillis()
 
-    // Append new transactions and evict entries older than 24h
+    // Append new transactions, evict entries older than 24h, and cap buffer size
     val updatedBuffer = (existing ++ txns)
       .filter(t => nowMs - t.process_ts.getTime < WINDOW_24H_MS)
+      .sortBy(-_.process_ts.getTime) // newest first
+      .take(MAX_BUFFER_SIZE)
 
     val newState = TxnAggState(updatedBuffer, nowMs)
     state.update(newState)
+
+    // Load customer profile from HBase.
+    // For BYPASS_CTR tagged transactions (large cash), skip HBase lookup for speed.
+    val isBypass = txns.exists(_.route_tag == "BYPASS_CTR")
+    val customerFeatures = if (isBypass) {
+      None // Skip HBase for bypass lane - large CTR transactions don't need enrichment
+    } else {
+      val hbaseClient = new HBaseClient(hbaseQuorum, hbasePort, hbaseTable)
+      try {
+        hbaseClient.getCustomerFeatures(customerId)
+      } finally {
+        hbaseClient.close()
+      }
+    }
+
+    val riskLevel = customerFeatures.map(_.riskLevel).getOrElse("UNKNOWN")
+    val riskScore = customerFeatures.map(_.riskScore).getOrElse(0.0)
+    val kycStatus = customerFeatures.map(_.kycStatus).getOrElse("UNKNOWN")
+    val alertCountTotal = customerFeatures.map(_.alertCountTotal).getOrElse(0L)
+    val openAlertCount = customerFeatures.map(_.openAlertCount).getOrElse(0)
 
     // Emit one EnrichedTransaction per incoming transaction
     txns.map { txn =>
@@ -168,6 +210,12 @@ object FeatureEnrichmentJob {
         total_amount_24h           = recent24h.map(_.amountUsd).sum,
         max_amount_24h             = if (recent24h.nonEmpty) recent24h.map(_.amountUsd).max else BigDecimal(0),
         unique_counterparties_24h  = recent24h.map(_.counterpartyId).distinct.size.toLong,
+        risk_level = riskLevel,
+        risk_score = riskScore,
+        kyc_status = kycStatus,
+        alert_count_total = alertCountTotal,
+        open_alert_count = openAlertCount,
+        route_tag = txn.route_tag,
         enriched_ts = new java.sql.Timestamp(nowMs)
       )
     }

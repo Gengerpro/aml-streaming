@@ -3,34 +3,12 @@ package com.aml.batch.feature
 import org.apache.spark.sql.{SparkSession, DataFrame}
 import org.apache.spark.sql.functions._
 
-case class RiskFactors(
-  countryRisk: Double,
-  productRisk: Double,
-  customerTypeRisk: Double,
-  txnPatternRisk: Double
-)
-
 object UserProfileJob {
 
   val countryRiskWeights = Map(
     "IR" -> 1.0, "KP" -> 1.0, "SY" -> 0.9, "CU" -> 0.8,
     "US" -> 0.1, "GB" -> 0.1, "DE" -> 0.1, "FR" -> 0.1
   )
-
-  def calculateRiskScore(factors: RiskFactors): Double = {
-    val weights = (0.3, 0.25, 0.25, 0.2)
-    val score = factors.countryRisk * weights._1 +
-      factors.productRisk * weights._2 +
-      factors.customerTypeRisk * weights._3 +
-      factors.txnPatternRisk * weights._4
-    Math.min(1.0, Math.max(0.0, score))
-  }
-
-  def riskLevel(score: Double): String = {
-    if (score >= 0.7) "HIGH"
-    else if (score >= 0.4) "MEDIUM"
-    else "LOW"
-  }
 
   def main(args: Array[String]): Unit = {
     val spark = SparkSession.builder()

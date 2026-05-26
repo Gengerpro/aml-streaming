@@ -26,27 +26,28 @@ class HBaseClient(zookeeperQuorum: String, zookeeperPort: Int, tableName: String
   conf.set("hbase.zookeeper.quorum", zookeeperQuorum)
   conf.setInt("hbase.zookeeper.property.clientPort", zookeeperPort)
 
-  private def getConnection = ConnectionFactory.createConnection(conf)
+  // Reuse a single connection (thread-safe) instead of creating per query
+  @volatile private lazy val connection = ConnectionFactory.createConnection(conf)
+
+  def close(): Unit = {
+    if (connection != null && !connection.isClosed) connection.close()
+  }
 
   def getCustomerFeatures(customerId: String): Option[CustomerFeatures] = {
     Try {
-      val connection = getConnection
+      val table = connection.getTable(TableName.valueOf(tableName))
       try {
-        val table = connection.getTable(TableName.valueOf(tableName))
-        try {
-          val rowKey = s"${customerId.hashCode.abs % 1000}_$customerId"
-          val get = new Get(Bytes.toBytes(rowKey))
-          get.addFamily(Bytes.toBytes("cf:risk"))
-          get.addFamily(Bytes.toBytes("cf:txn_stats"))
-          get.addFamily(Bytes.toBytes("cf:alert"))
-          val result = table.get(get)
-          if (result.isEmpty) None
-          else Some(parseCustomerFeatures(result, customerId))
-        } finally {
-          table.close()
-        }
+        val rowKey = s"${customerId.hashCode.abs % 1000}_$customerId"
+        val get = new Get(Bytes.toBytes(rowKey))
+        get.addFamily(Bytes.toBytes("cf:risk"))
+        get.addFamily(Bytes.toBytes("cf:profile"))
+        get.addFamily(Bytes.toBytes("cf:txn_stats"))
+        get.addFamily(Bytes.toBytes("cf:alert"))
+        val result = table.get(get)
+        if (result.isEmpty) None
+        else Some(parseCustomerFeatures(result, customerId))
       } finally {
-        connection.close()
+        table.close()
       }
     }.getOrElse(None)
   }

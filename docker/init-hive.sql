@@ -90,3 +90,53 @@ CREATE TABLE IF NOT EXISTS aml.rule_versions
 )
 PARTITIONED BY (dt STRING)
 STORED AS PARQUET;
+
+CREATE TABLE IF NOT EXISTS aml.ctr_reports
+(
+    alert_id        STRING,
+    txn_id          STRING,
+    customer_id     STRING,
+    rule_desc       STRING,
+    amount          DECIMAL(18,2),
+    currency        STRING,
+    channel         STRING,
+    created_at      TIMESTAMP,
+    report_status   STRING
+)
+PARTITIONED BY (dt STRING)
+STORED AS PARQUET;
+
+CREATE TABLE IF NOT EXISTS aml.sar_reports
+(
+    alert_id        STRING,
+    txn_id          STRING,
+    customer_id     STRING,
+    rule_desc       STRING,
+    severity        STRING,
+    amount          DECIMAL(18,2),
+    currency        STRING,
+    created_at      TIMESTAMP,
+    report_status   STRING,
+    reviewer_id     STRING
+)
+PARTITIONED BY (dt STRING)
+STORED AS PARQUET;
+
+CREATE TABLE IF NOT EXISTS aml.customer_features
+(
+    customer_id                  STRING,
+    risk_level                   STRING,
+    risk_score                   DOUBLE,
+    kyc_status                   STRING,
+    txn_count_7d                 BIGINT,
+    txn_count_30d                BIGINT,
+    total_amount_7d              DECIMAL(18,2),
+    total_amount_30d             DECIMAL(18,2),
+    avg_amount                   DECIMAL(18,2),
+    max_amount                   DECIMAL(18,2),
+    unique_counterparties_30d    INT,
+    alert_count_total            BIGINT,
+    open_alert_count             INT
+)
+PARTITIONED BY (dt STRING)
+STORED AS PARQUET;

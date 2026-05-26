@@ -12,7 +12,7 @@ rules:
         value: [ATM, BRANCH]
     actions:
       - type: ALERT
-        template: "Large cash transaction: ${amount} via ${channel}"
+        template: "Large cash transaction: $${amount} via $${channel}"
 
   - id: SAR-001
     name: "Structuring Detection"
@@ -31,6 +31,53 @@ rules:
         value: 40000
     actions:
       - type: ALERT
-        template: "Potential structuring: ${txn_count_24h} transactions totaling ${total_amount_24h}"
+        template: "Potential structuring: $${txn_count_24h} transactions totaling $${total_amount_24h}"
       - type: ESCALATE
         priority: HIGH
+
+  - id: SAR-002
+    name: "Anomalous Frequency"
+    type: SAR
+    severity: MEDIUM
+    window: 1h
+    conditions:
+      - field: txn_count_1h
+        operator: GTE
+        value: 20
+    actions:
+      - type: ALERT
+        template: "Anomalous frequency: $${txn_count_1h} transactions in 1 hour"
+
+  - id: SAR-003
+    name: "High-Risk Country Transfer"
+    type: SAR
+    severity: HIGH
+    conditions:
+      - field: countryDst
+        operator: IN
+        value: [IR, KP, SY, CU]
+      - field: amountUsd
+        operator: GTE
+        value: 5000
+    actions:
+      - type: ALERT
+        template: "High-risk country transfer: $${amountUsd} to $${countryDst}"
+
+  - id: SAR-004
+    name: "Rapid In-Out"
+    type: SAR
+    severity: MEDIUM
+    window: 24h
+    conditions:
+      - field: txn_count_24h
+        operator: GTE
+        value: 3
+      - field: unique_counterparties_24h
+        operator: LTE
+        value: 2
+      - field: risk_level
+        operator: IN
+        value: [HIGH, PROHIBITED]
+    actions:
+      - type: ALERT
+        template: "Rapid in-out: $${txn_count_24h} txns with $${unique_counterparties_24h} counterparties"

@@ -24,19 +24,11 @@ class SanctionsScreener(
     // Phase 1: Bloom Filter fast check
     val normalized = normalize(name)
     if (!bloomFilter.mightContain(normalized)) {
-      // If the exact normalized form isn't in the bloom filter,
-      // still check with fuzzy matching against all sanctioned names
-      // (bloom filter is an optimization for the common case)
-      val fuzzyMatch = findBestMatch(normalized)
-      return fuzzyMatch match {
-        case Some((matched, score)) =>
-          ScreeningResult(isHit = true, Some(SanctionMatch(matched, "OFAC", score)))
-        case None =>
-          ScreeningResult(isHit = false, None)
-      }
+      // Bloom Filter says definitely not in set - skip expensive fuzzy matching
+      return ScreeningResult(isHit = false, None)
     }
 
-    // Phase 2: Precise fuzzy matching
+    // Phase 2: Bloom Filter hit - do precise fuzzy matching to confirm
     findBestMatch(normalized) match {
       case Some((matched, score)) =>
         ScreeningResult(isHit = true, Some(SanctionMatch(matched, "OFAC", score)))

@@ -1,0 +1,113 @@
+# AML Detection Rules - Production Configuration
+# All 6 pre-defined rules per FATF design spec
+
+rules:
+  # ── CTR: Currency Transaction Report ──────────────────────────────
+  - id: CTR-001
+    name: "Large Cash Transaction"
+    type: CTR
+    severity: HIGH
+    conditions:
+      - field: amountUsd
+        operator: GTE
+        value: 10000
+      - field: txn_type_normalized
+        operator: EQ
+        value: "TRANSFER"
+      - field: channel
+        operator: IN
+        value: [ATM, BRANCH]
+    actions:
+      - type: ALERT
+        template: "CTR: Large cash transaction $${amountUsd} via $${channel}"
+
+  # ── SAR: Suspicious Activity Report ──────────────────────────────
+  - id: SAR-001
+    name: "Structuring Detection"
+    type: SAR
+    severity: HIGH
+    window: 24h
+    conditions:
+      - field: txn_count_24h
+        operator: GTE
+        value: 5
+      - field: max_amount_24h
+        operator: LT
+        value: 10000
+      - field: total_amount_24h
+        operator: GTE
+        value: 40000
+    actions:
+      - type: ALERT
+        template: "SAR: Potential structuring - $${txn_count_24h} transactions totaling $${total_amount_24h}"
+      - type: ESCALATE
+        priority: HIGH
+
+  - id: SAR-002
+    name: "Anomalous Frequency"
+    type: SAR
+    severity: MEDIUM
+    window: 1h
+    conditions:
+      - field: txn_count_1h
+        operator: GTE
+        value: 20
+    actions:
+      - type: ALERT
+        template: "SAR: Anomalous frequency - $${txn_count_1h} transactions in 1 hour for customer $${customerId}"
+      - type: ESCALATE
+        priority: MEDIUM
+
+  - id: SAR-003
+    name: "High-Risk Country Transfer"
+    type: SAR
+    severity: HIGH
+    conditions:
+      - field: countryDst
+        operator: IN
+        value: [IR, KP, SY, CU, MM, SD, VE]
+      - field: amountUsd
+        operator: GTE
+        value: 5000
+    actions:
+      - type: ALERT
+        template: "SAR: High-risk country transfer $${amountUsd} to $${countryDst}"
+      - type: ESCALATE
+        priority: HIGH
+
+  - id: SAR-004
+    name: "Rapid In-Out"
+    type: SAR
+    severity: MEDIUM
+    window: 24h
+    conditions:
+      - field: txn_count_24h
+        operator: GTE
+        value: 3
+      - field: unique_counterparties_24h
+        operator: LTE
+        value: 2
+      - field: risk_level
+        operator: IN
+        value: [HIGH, PROHIBITED]
+    actions:
+      - type: ALERT
+        template: "SAR: Rapid in-out pattern - $${txn_count_24h} txns with $${unique_counterparties_24h} counterparties, risk=$${risk_level}"
+      - type: ESCALATE
+        priority: MEDIUM
+
+  # ── Risk-Based Alerts ────────────────────────────────────────────
+  - id: RISK-001
+    name: "High-Risk Customer Large Transaction"
+    type: RULE
+    severity: MEDIUM
+    conditions:
+      - field: risk_level
+        operator: EQ
+        value: "HIGH"
+      - field: amountUsd
+        operator: GTE
+        value: 5000
+    actions:
+      - type: ALERT
+        template: "RISK: High-risk customer $${customerId} transaction $${amountUsd}"

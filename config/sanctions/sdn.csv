@@ -1,0 +1,30 @@
+# OFAC SDN Sanctions List (Sample)
+# Format: one name per line
+# Lines starting with # are comments
+# In production, replace with full OFAC/EU/UN sanctions lists
+
+# Individuals
+AL QAIDA
+OSAMA BIN LADEN
+AYMAN AL ZAWAHIRI
+ABU BAKR AL BAGHDADI
+
+# Organizations
+ISIS
+ISLAMIC STATE
+TALIBAN
+HEZBOLLAH
+HAMAS
+AL SHABAAB
+BOKO HARAM
+FARC
+
+# Banks & Financial Institutions
+BANK SEPAH
+BANK MELLI
+KOREA KWANGSON BANKING
+BANK OF DANDONG
+
+# Government Entities
+IRANIAN REVOLUTIONARY GUARD
+KOREAN PEOPLES ARMY

@@ -76,20 +76,20 @@ object TransactionSerDe {
 
 object AlertSerDe {
   def serialize(alert: Alert): Array[Byte] = {
-    // Use a map-based approach to avoid enum serialization issues
+    // Use snake_case keys to match ClickHouse alert_queue schema
     val map = Map(
-      "alertId" -> alert.alertId,
-      "txnId" -> alert.txnId,
-      "customerId" -> alert.customerId,
-      "alertType" -> alert.alertType.toString,
+      "alert_id" -> alert.alertId,
+      "txn_id" -> alert.txnId,
+      "customer_id" -> alert.customerId,
+      "alert_type" -> alert.alertType.toString,
       "severity" -> alert.severity.toString,
-      "ruleId" -> alert.ruleId,
-      "ruleDesc" -> alert.ruleDesc,
+      "rule_id" -> alert.ruleId,
+      "rule_desc" -> alert.ruleDesc,
       "score" -> alert.score,
       "status" -> alert.status.toString,
-      "createdAt" -> alert.createdAt.toString,
-      "updatedAt" -> alert.updatedAt.toString,
-      "reviewerId" -> alert.reviewerId.orNull,
+      "created_at" -> alert.createdAt.toString,
+      "updated_at" -> alert.updatedAt.toString,
+      "reviewer_id" -> alert.reviewerId.orNull,
       "notes" -> alert.notes.orNull
     )
     KafkaSerDe.toJsonBytes(map)
@@ -105,19 +105,19 @@ object AlertSerDe {
     val json = new String(bytes, "UTF-8")
     val node = readMapper.readTree(json)
     Alert(
-      alertId = node.get("alertId").asText(),
-      txnId = node.get("txnId").asText(),
-      customerId = node.get("customerId").asText(),
-      alertType = AlertType.withName(node.get("alertType").asText()),
-      severity = Severity.withName(node.get("severity").asText()),
-      ruleId = node.get("ruleId").asText(),
-      ruleDesc = node.get("ruleDesc").asText(),
-      score = node.get("score").floatValue(),
-      status = AlertStatus.withName(node.get("status").asText()),
-      createdAt = java.time.Instant.parse(node.get("createdAt").asText()),
-      updatedAt = java.time.Instant.parse(node.get("updatedAt").asText()),
-      reviewerId = Option(node.get("reviewerId")).filterNot(_.isNull).map(_.asText()),
-      notes = Option(node.get("notes")).filterNot(_.isNull).map(_.asText())
+      alertId = node.path("alert_id").asText(),
+      txnId = node.path("txn_id").asText(),
+      customerId = node.path("customer_id").asText(),
+      alertType = AlertType.withName(node.path("alert_type").asText()),
+      severity = Severity.withName(node.path("severity").asText()),
+      ruleId = node.path("rule_id").asText(),
+      ruleDesc = node.path("rule_desc").asText(),
+      score = node.path("score").floatValue(),
+      status = AlertStatus.withName(node.path("status").asText()),
+      createdAt = java.time.Instant.parse(node.path("created_at").asText()),
+      updatedAt = java.time.Instant.parse(node.path("updated_at").asText()),
+      reviewerId = Option(node.path("reviewer_id")).filterNot(_.isMissingNode).filterNot(_.isNull).map(_.asText()),
+      notes = Option(node.path("notes")).filterNot(_.isMissingNode).filterNot(_.isNull).map(_.asText())
     )
   }
 }

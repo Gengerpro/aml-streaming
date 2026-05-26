@@ -46,3 +46,20 @@ CREATE TABLE IF NOT EXISTS aml.reconciliation_log
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(report_date)
 ORDER BY report_date;
+
+CREATE TABLE IF NOT EXISTS aml.txn_chain_view
+(
+    txn_id          String,
+    customer_id     String,
+    counterparty_id String,
+    amount_usd      Decimal18(2),
+    txn_type        String,
+    channel         String,
+    country_src     String,
+    country_dst     String,
+    timestamp       DateTime64(3)
+)
+ENGINE = MergeTree()
+PARTITION BY toYYYYMM(timestamp)
+ORDER BY (customer_id, timestamp)
+TTL timestamp + INTERVAL 1 YEAR;

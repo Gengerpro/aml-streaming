@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AML Monitoring Dashboard</title>
+  <style>
+    :root {
+      --bg: #0f1117; --surface: #1a1d27; --border: #2a2d3a;
+      --text: #e1e4eb; --muted: #8b8fa3; --accent: #6366f1;
+      --danger: #ef4444; --warn: #f59e0b; --success: #22c55e; --info: #3b82f6;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); }
+    .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
+    .header h1 { font-size: 18px; font-weight: 600; }
+    .header .status { font-size: 12px; padding: 4px 10px; border-radius: 12px; background: var(--success); color: #000; }
+    .nav { display: flex; gap: 4px; padding: 8px 24px; background: var(--surface); border-bottom: 1px solid var(--border); }
+    .nav button { background: none; border: none; color: var(--muted); padding: 8px 16px; cursor: pointer; border-radius: 6px; font-size: 13px; }
+    .nav button.active { background: var(--accent); color: #fff; }
+    .container { padding: 24px; max-width: 1400px; margin: 0 auto; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
+    .stat-card .label { font-size: 12px; color: var(--muted); text-transform: uppercase; }
+    .stat-card .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+    .stat-card .value.danger { color: var(--danger); }
+    .stat-card .value.warn { color: var(--warn); }
+    .stat-card .value.info { color: var(--info); }
+    table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    th { text-align: left; padding: 12px 16px; font-size: 12px; color: var(--muted); text-transform: uppercase; border-bottom: 1px solid var(--border); }
+    td { padding: 10px 16px; font-size: 13px; border-bottom: 1px solid var(--border); }
+    tr:hover { background: rgba(99,102,241,0.05); }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .badge.critical { background: rgba(239,68,68,0.15); color: var(--danger); }
+    .badge.high { background: rgba(245,158,11,0.15); color: var(--warn); }
+    .badge.medium { background: rgba(59,130,246,0.15); color: var(--info); }
+    .badge.low { background: rgba(34,197,94,0.15); color: var(--success); }
+    .badge.new { background: rgba(99,102,241,0.15); color: var(--accent); }
+    .badge.escalated { background: rgba(239,68,68,0.15); color: var(--danger); }
+    .badge.closed { background: rgba(139,143,163,0.15); color: var(--muted); }
+    .btn { padding: 6px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); cursor: pointer; font-size: 12px; }
+    .btn:hover { border-color: var(--accent); }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .section { display: none; }
+    .section.active { display: block; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+    .card h3 { font-size: 14px; margin-bottom: 12px; }
+    .form-row { display: flex; gap: 12px; margin-bottom: 12px; }
+    .form-row input, .form-row select { flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font-size: 13px; }
+    .form-row input:focus, .form-row select:focus { outline: none; border-color: var(--accent); }
+    .trace-chain { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 0; }
+    .trace-node { background: var(--accent); color: #fff; padding: 6px 12px; border-radius: 6px; font-size: 12px; }
+    .trace-arrow { color: var(--muted); font-size: 16px; }
+    .loading { text-align: center; padding: 40px; color: var(--muted); }
+    #toast { position: fixed; bottom: 20px; right: 20px; background: var(--success); color: #000; padding: 10px 20px; border-radius: 8px; display: none; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🛡 AML Monitoring System</h1>
+    <span class="status" id="apiStatus">● Connected</span>
+    <span style="margin-left:auto;font-size:12px;color:var(--muted)" id="clock"></span>
+  </div>
+
+  <div class="nav">
+    <button class="active" onclick="showSection('dashboard')">Dashboard</button>
+    <button onclick="showSection('alerts')">Alerts</button>
+    <button onclick="showSection('cases')">Cases</button>
+    <button onclick="showSection('kyc')">KYC</button>
+    <button onclick="showSection('trace')">Fund Trace</button>
+    <button onclick="showSection('reports')">Reports</button>
+  </div>
+
+  <div class="container">
+    <!-- Dashboard -->
+    <div class="section active" id="sec-dashboard">
+      <div class="stats">
+        <div class="stat-card"><div class="label">New Alerts</div><div class="value danger" id="stat-new">-</div></div>
+        <div class="stat-card"><div class="label">Open Cases</div><div class="value warn" id="stat-cases">-</div></div>
+        <div class="stat-card"><div class="label">High Risk Customers</div><div class="value info" id="stat-highrisk">-</div></div>
+        <div class="stat-card"><div class="label">Overdue Reviews</div><div class="value" id="stat-overdue">-</div></div>
+      </div>
+      <h2 style="font-size:16px;margin-bottom:16px">Recent Alerts</h2>
+      <table>
+        <thead><tr><th>Alert ID</th><th>Customer</th><th>Type</th><th>Severity</th><th>Rule</th><th>Status</th><th>Created</th><th>Action</th></tr></thead>
+        <tbody id="alertTableBody"><tr><td colspan="8" class="loading">Loading...</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- Alerts -->
+    <div class="section" id="sec-alerts">
+      <h2 style="font-size:16px;margin-bottom:16px">Alert Queue</h2>
+      <table>
+        <thead><tr><th>Alert ID</th><th>Customer</th><th>Type</th><th>Severity</th><th>Rule</th><th>Score</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody id="alertQueueBody"><tr><td colspan="8" class="loading">Loading...</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- Cases -->
+    <div class="section" id="sec-cases">
+      <div class="card">
+        <h3>Create Case</h3>
+        <div class="form-row">
+          <input id="case-cid" placeholder="Customer ID">
+          <input id="case-title" placeholder="Case Title">
+          <select id="case-priority"><option value="LOW">LOW</option><option value="MEDIUM" selected>MEDIUM</option><option value="HIGH">HIGH</option><option value="CRITICAL">CRITICAL</option></select>
+          <button class="btn primary" onclick="createCase()">Create</button>
+        </div>
+      </div>
+      <h2 style="font-size:16px;margin:16px 0">Open Cases</h2>
+      <table>
+        <thead><tr><th>Case ID</th><th>Customer</th><th>Title</th><th>Priority</th><th>Status</th><th>Assigned</th><th>Created</th></tr></thead>
+        <tbody id="caseTableBody"><tr><td colspan="7" class="loading">Loading...</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- KYC -->
+    <div class="section" id="sec-kyc">
+      <div class="card">
+        <h3>Customer Lookup</h3>
+        <div class="form-row">
+          <input id="kyc-search" placeholder="Customer ID">
+          <button class="btn primary" onclick="lookupKyc()">Search</button>
+        </div>
+      </div>
+      <div id="kycResult"></div>
+      <h2 style="font-size:16px;margin:16px 0">High Risk Customers</h2>
+      <table>
+        <thead><tr><th>Customer ID</th><th>Name</th><th>Nationality</th><th>Risk Level</th><th>Risk Score</th><th>KYC Level</th><th>Next Review</th></tr></thead>
+        <tbody id="kycTableBody"><tr><td colspan="7" class="loading">Loading...</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- Fund Trace -->
+    <div class="section" id="sec-trace">
+      <div class="card">
+        <h3>Fund Chain Traceability</h3>
+        <div class="form-row">
+          <input id="trace-cid" placeholder="Customer ID">
+          <select id="trace-dir"><option value="forward">Forward (where did money go)</option><option value="backward">Backward (where did money come from)</option></select>
+          <input id="trace-hops" type="number" value="5" min="1" max="10" style="max-width:80px" placeholder="Max Hops">
+          <button class="btn primary" onclick="traceFunds()">Trace</button>
+        </div>
+      </div>
+      <div id="traceResult"></div>
+    </div>
+
+    <!-- Reports -->
+    <div class="section" id="sec-reports">
+      <h2 style="font-size:16px;margin-bottom:16px">Pending Submissions</h2>
+      <table>
+        <thead><tr><th>Report ID</th><th>Type</th><th>Customer</th><th>Format</th><th>Status</th><th>Generated</th><th>Action</th></tr></thead>
+        <tbody id="reportTableBody"><tr><td colspan="7" class="loading">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    const API = '/api';
+
+    // ── Navigation ──────────────────────────────────────────────
+    function showSection(name) {
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+      document.getElementById('sec-' + name).classList.add('active');
+      event.target.classList.add('active');
+      // Load data for the section
+      if (name === 'dashboard') loadDashboard();
+      else if (name === 'alerts') loadAlertQueue();
+      else if (name === 'cases') loadCases();
+      else if (name === 'kyc') loadHighRisk();
+      else if (name === 'reports') loadReports();
+    }
+
+    // ── API Helpers ─────────────────────────────────────────────
+    async function api(path, opts) {
+      try {
+        const res = await fetch(API + path, { headers: {'Content-Type':'application/json'}, ...opts });
+        if (!res.ok) throw new Error(res.statusText);
+        return await res.json();
+      } catch(e) { console.error('API error:', e); toast('API Error: ' + e.message); return null; }
+    }
+
+    function toast(msg) {
+      const t = document.getElementById('toast'); t.textContent = msg; t.style.display = 'block';
+      setTimeout(() => t.style.display = 'none', 3000);
+    }
+
+    function severityBadge(s) { return `<span class="badge ${(s||'').toLowerCase()}">${s}</span>`; }
+    function statusBadge(s) { return `<span class="badge ${(s||'').toLowerCase()}">${s}</span>`; }
+    function shortId(id) { return id ? id.substring(0, 8) + '...' : '-'; }
+    function formatTime(ts) { if (!ts) return '-'; const d = new Date(ts); return d.toLocaleString(); }
+
+    // ── Dashboard ───────────────────────────────────────────────
+    async function loadDashboard() {
+      const [alerts, cases, highrisk] = await Promise.all([
+        api('/alerts/new'), api('/cases/open'), api('/kyc/high-risk')
+      ]);
+      if (alerts) {
+        document.getElementById('stat-new').textContent = alerts.length;
+        const tbody = document.getElementById('alertTableBody');
+        tbody.innerHTML = alerts.slice(0, 10).map(a => `
+          <tr>
+            <td>${shortId(a.alertId)}</td><td>${a.customerId}</td><td>${a.alertType}</td>
+            <td>${severityBadge(a.severity)}</td><td>${a.ruleId}</td>
+            <td>${statusBadge(a.status)}</td><td>${formatTime(a.createdAt)}</td>
+            <td><button class="btn" onclick="reviewAlert('${a.alertId}','ESCALATED')">Escalate</button>
+            <button class="btn" onclick="reviewAlert('${a.alertId}','CLOSED')">Close</button></td>
+          </tr>`).join('');
+      }
+      if (cases) document.getElementById('stat-cases').textContent = cases.length;
+      if (highrisk) document.getElementById('stat-highrisk').textContent = highrisk.length;
+    }
+
+    // ── Alert Queue ─────────────────────────────────────────────
+    async function loadAlertQueue() {
+      const alerts = await api('/alerts/new');
+      if (!alerts) return;
+      const tbody = document.getElementById('alertQueueBody');
+      tbody.innerHTML = alerts.map(a => `
+        <tr>
+          <td>${shortId(a.alertId)}</td><td>${a.customerId}</td><td>${a.alertType}</td>
+          <td>${severityBadge(a.severity)}</td><td>${a.ruleId}</td><td>${(a.score||0).toFixed(2)}</td>
+          <td>${statusBadge(a.status)}</td>
+          <td><button class="btn" onclick="reviewAlert('${a.alertId}','ESCALATED')">Escalate</button>
+          <button class="btn" onclick="reviewAlert('${a.alertId}','CLOSED')">Close</button></td>
+        </tr>`).join('');
+    }
+
+    async function reviewAlert(id, action) {
+      await api(`/alerts/${id}/review`, { method:'POST', body: JSON.stringify({reviewerId:'admin', action, notes:'Reviewed from dashboard'}) });
+      toast('Alert ' + action.toLowerCase());
+      loadDashboard(); loadAlertQueue();
+    }
+
+    // ── Cases ───────────────────────────────────────────────────
+    async function loadCases() {
+      const cases = await api('/cases/open');
+      if (!cases) return;
+      const tbody = document.getElementById('caseTableBody');
+      tbody.innerHTML = cases.map(c => `
+        <tr>
+          <td>${shortId(c.caseId)}</td><td>${c.customerId}</td><td>${c.title}</td>
+          <td>${severityBadge(c.priority)}</td><td>${statusBadge(c.status)}</td>
+          <td>${c.assignedTo||'-'}</td><td>${formatTime(c.createdAt)}</td>
+        </tr>`).join('');
+    }
+
+    async function createCase() {
+      const data = { customerId: document.getElementById('case-cid').value, title: document.getElementById('case-title').value, priority: document.getElementById('case-priority').value };
+      if (!data.customerId || !data.title) { toast('Fill in all fields'); return; }
+      await api('/cases', { method:'POST', body: JSON.stringify(data) });
+      toast('Case created'); loadCases();
+      document.getElementById('case-cid').value = ''; document.getElementById('case-title').value = '';
+    }
+
+    // ── KYC ─────────────────────────────────────────────────────
+    async function loadHighRisk() {
+      const customers = await api('/kyc/high-risk');
+      if (!customers) return;
+      const tbody = document.getElementById('kycTableBody');
+      tbody.innerHTML = customers.map(k => `
+        <tr>
+          <td>${k.customerId}</td><td>${k.name||'-'}</td><td>${k.nationality||'-'}</td>
+          <td>${severityBadge(k.riskLevel)}</td><td>${(k.riskScore||0).toFixed(2)}</td>
+          <td>${k.kycLevel||'-'}</td><td>${formatTime(k.nextReviewDate)}</td>
+        </tr>`).join('');
+    }
+
+    async function lookupKyc() {
+      const cid = document.getElementById('kyc-search').value;
+      if (!cid) return;
+      const k = await api('/kyc/' + cid);
+      if (!k) { document.getElementById('kycResult').innerHTML = '<div class="card"><p>Customer not found</p></div>'; return; }
+      document.getElementById('kycResult').innerHTML = `
+        <div class="card">
+          <h3>${k.name || k.customerId}</h3>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;font-size:13px">
+            <div><span style="color:var(--muted)">ID:</span> ${k.customerId}</div>
+            <div><span style="color:var(--muted)">Nationality:</span> ${k.nationality||'-'}</div>
+            <div><span style="color:var(--muted)">Occupation:</span> ${k.occupation||'-'}</div>
+            <div><span style="color:var(--muted)">Risk Level:</span> ${severityBadge(k.riskLevel)}</div>
+            <div><span style="color:var(--muted)">Risk Score:</span> ${(k.riskScore||0).toFixed(2)}</div>
+            <div><span style="color:var(--muted)">KYC Level:</span> ${k.kycLevel||'-'}</div>
+            <div><span style="color:var(--muted)">Last Review:</span> ${formatTime(k.lastReviewDate)}</div>
+            <div><span style="color:var(--muted)">Next Review:</span> ${formatTime(k.nextReviewDate)}</div>
+            <div><span style="color:var(--muted)">Status:</span> ${statusBadge(k.reviewStatus)}</div>
+          </div>
+        </div>`;
+    }
+
+    // ── Fund Trace ──────────────────────────────────────────────
+    async function traceFunds() {
+      const cid = document.getElementById('trace-cid').value;
+      const dir = document.getElementById('trace-dir').value;
+      const hops = document.getElementById('trace-hops').value;
+      if (!cid) { toast('Enter a customer ID'); return; }
+      const chain = await api(`/trace/${dir}/${cid}?maxHops=${hops}`);
+      const div = document.getElementById('traceResult');
+      if (!chain || chain.length === 0) { div.innerHTML = '<div class="card"><p>No fund chain found</p></div>'; return; }
+      let html = `<div class="card"><h3>Fund Chain (${dir}): ${cid}</h3>`;
+      html += '<div class="trace-chain"><span class="trace-node">' + cid + '</span>';
+      chain.forEach((hop, i) => {
+        const next = hop[0];
+        html += `<span class="trace-arrow">→</span><span class="trace-node">${next.counterparty}</span>`;
+        html += `<span style="font-size:11px;color:var(--muted)">($${Number(next.amount).toLocaleString()})</span>`;
+      });
+      html += '</div>';
+      html += '<table><thead><tr><th>Hop</th><th>Txn ID</th><th>From</th><th>To</th><th>Amount</th><th>Type</th></tr></thead><tbody>';
+      chain.forEach((hop, i) => {
+        hop.forEach(t => {
+          html += `<tr><td>${i+1}</td><td>${shortId(t.txn_id)}</td><td>${t.customer}</td><td>${t.counterparty}</td><td>$${Number(t.amount).toLocaleString()}</td><td>${t.type||'-'}</td></tr>`;
+        });
+      });
+      html += '</tbody></table></div>';
+      div.innerHTML = html;
+    }
+
+    // ── Reports ─────────────────────────────────────────────────
+    async function loadReports() {
+      const reports = await api('/reports/pending');
+      if (!reports) return;
+      const tbody = document.getElementById('reportTableBody');
+      tbody.innerHTML = reports.map(r => `
+        <tr>
+          <td>${r.reportId}</td><td>${r.reportType}</td><td>${r.customerId||'-'}</td>
+          <td>${r.format}</td><td>${statusBadge(r.status)}</td><td>${formatTime(r.generatedAt)}</td>
+          <td><button class="btn primary" onclick="submitReport('${r.reportId}')">Submit</button></td>
+        </tr>`).join('');
+    }
+
+    async function submitReport(id) {
+      await api(`/reports/${id}/submit`, { method:'POST', body: JSON.stringify({submittedBy:'admin'}) });
+      toast('Report submitted'); loadReports();
+    }
+
+    // ── Clock ───────────────────────────────────────────────────
+    setInterval(() => { document.getElementById('clock').textContent = new Date().toLocaleString(); }, 1000);
+
+    // ── Init ────────────────────────────────────────────────────
+    loadDashboard();
+  </script>
+</body>
+</html>

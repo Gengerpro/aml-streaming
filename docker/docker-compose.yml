@@ -12,12 +12,18 @@ services:
     volumes:
       - zookeeper-data:/var/lib/zookeeper/data
       - zookeeper-logs:/var/lib/zookeeper/log
+    healthcheck:
+      test: echo ruok | nc localhost 2181 | grep imok
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     container_name: aml-kafka
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_healthy
     ports:
       - "9092:9092"
     environment:
@@ -30,6 +36,11 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     volumes:
       - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: kafka-broker-api-versions --bootstrap-server localhost:9092
+      interval: 15s
+      timeout: 10s
+      retries: 5
 
   redis:
     image: redis:7-alpine
@@ -39,6 +50,11 @@ services:
     command: redis-server --appendonly yes
     volumes:
       - redis-data:/data
+    healthcheck:
+      test: redis-cli ping | grep PONG
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   clickhouse:
     image: clickhouse/clickhouse-server:24.3
@@ -54,6 +70,11 @@ services:
       nofile:
         soft: 262144
         hard: 262144
+    healthcheck:
+      test: clickhouse-client --query "SELECT 1"
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   hbase:
     image: harisekhon/hbase:2.5
@@ -63,6 +84,14 @@ services:
       - "16020:16020"
     environment:
       HBASE_ZOOKEEPER_QUORUM: zookeeper
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    healthcheck:
+      test: /opt/hbase/bin/hbase status 'simple' 2>&1 | grep -q "1 active master"
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   hive:
     image: apache/hive:3.1.3
@@ -73,6 +102,47 @@ services:
     environment:
       HIVE_CORE_CONF_javax_jdo_option_ConnectionURL: "jdbc:derby:;databaseName=/opt/hive/metastore/metastore_db;create=true"
       SERVICE_NAME: "metastore"
+    healthcheck:
+      test: hive -e "SELECT 1" 2>/dev/null || exit 1
+      interval: 30s
+      timeout: 15s
+      retries: 5
+
+  aml-service:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: aml-service
+    ports:
+      - "8080:8080"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:h2:mem:amldb
+      AML_CLICKHOUSE_JDBC_URL: jdbc:clickhouse://clickhouse:8123/aml
+      AML_REDIS_HOST: redis
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,metrics,prometheus,info
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
+    healthcheck:
+      test: curl -sf http://localhost:8080/actuator/health || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  aml-web:
+    image: nginx:alpine
+    container_name: aml-web
+    ports:
+      - "3000:80"
+    volumes:
+      - ../aml-web:/usr/share/nginx/html:ro
+    depends_on:
+      aml-service:
+        condition: service_healthy
 
 volumes:
   zookeeper-data:

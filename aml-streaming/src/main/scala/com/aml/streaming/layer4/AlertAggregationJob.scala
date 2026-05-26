@@ -47,8 +47,8 @@ object AlertAggregationJob {
 
     val alertSchema = new StructType()
       .add("alert_id", StringType)
-      .add("txnId", StringType)
-      .add("customerId", StringType)
+      .add("txn_id", StringType)
+      .add("customer_id", StringType)
       .add("alert_type", StringType)
       .add("severity", StringType)
       .add("rule_id", StringType)
@@ -56,6 +56,9 @@ object AlertAggregationJob {
       .add("score", FloatType)
       .add("status", StringType)
       .add("created_at", TimestampType)
+      .add("updated_at", TimestampType)
+      .add("reviewer_id", StringType)
+      .add("notes", StringType)
 
     val alerts = alertStream
       .selectExpr("CAST(value AS STRING) as json_str")
@@ -66,13 +69,13 @@ object AlertAggregationJob {
     val deduplicated = alerts
       .withWatermark("created_at", "30 minutes")
       .groupBy(
-        col("customerId"),
+        col("customer_id"),
         col("rule_id"),
         window(col("created_at"), "30 minutes")
       )
       .agg(
         first("alert_id").as("alert_id"),
-        first("txnId").as("txnId"),
+        first("txn_id").as("txn_id"),
         max(severityToNum(col("severity"))).as("severity_num"),
         first("alert_type").as("alert_type"),
         first("rule_desc").as("rule_desc"),
@@ -83,9 +86,6 @@ object AlertAggregationJob {
       .drop("severity_num")
       .withColumn("status", lit("NEW"))
       .withColumn("updated_at", current_timestamp())
-      // Rename camelCase Kafka fields to snake_case to match ClickHouse schema
-      .withColumnRenamed("txnId", "txn_id")
-      .withColumnRenamed("customerId", "customer_id")
 
     // Write to ClickHouse via JDBC
     val query = deduplicated.writeStream
@@ -99,7 +99,7 @@ object AlertAggregationJob {
           .mode("append")
           .save()
       }
-      .option("checkpointLocation", "/tmp/checkpoint/layer4-alerts")
+      .option("checkpointLocation", s"${config.checkpoint.basePath}/layer4-alerts")
       .outputMode("update")
       .start()
 

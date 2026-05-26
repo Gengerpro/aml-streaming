@@ -29,8 +29,14 @@ object ConditionEvaluator {
   }
 
   private def compareValues(a: Any, b: Any): Int = {
-    val numA = BigDecimal(a.toString)
-    val numB = BigDecimal(b.toString)
-    numA.compare(numB)
+    try {
+      val numA = BigDecimal(a.toString)
+      val numB = BigDecimal(b.toString)
+      numA.compare(numB)
+    } catch {
+      case _: NumberFormatException =>
+        // Non-numeric comparison falls back to string comparison
+        a.toString.compareTo(b.toString)
+    }
   }
 }

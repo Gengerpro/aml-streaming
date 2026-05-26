@@ -81,7 +81,7 @@ object NormalizationJob {
       .format("kafka")
       .option("kafka.bootstrap.servers", config.kafka.bootstrapServers)
       .option("topic", "txn.normalized")
-      .option("checkpointLocation", "/tmp/checkpoint/layer1-normalized")
+      .option("checkpointLocation", s"${config.checkpoint.basePath}/layer1-normalized")
       .outputMode("append")
       .start()
 
@@ -99,7 +99,7 @@ object NormalizationJob {
       .format("kafka")
       .option("kafka.bootstrap.servers", config.kafka.bootstrapServers)
       .option("topic", "txn.dlq")
-      .option("checkpointLocation", "/tmp/checkpoint/layer1-dlq")
+      .option("checkpointLocation", s"${config.checkpoint.basePath}/layer1-dlq")
       .outputMode("append")
       .start()
 
