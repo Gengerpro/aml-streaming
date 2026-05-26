@@ -26,8 +26,20 @@ class HBaseClient(zookeeperQuorum: String, zookeeperPort: Int, tableName: String
   conf.set("hbase.zookeeper.quorum", zookeeperQuorum)
   conf.setInt("hbase.zookeeper.property.clientPort", zookeeperPort)
 
-  // Reuse a single connection (thread-safe) instead of creating per query
-  @volatile private lazy val connection = ConnectionFactory.createConnection(conf)
+  // Use a volatile var instead of lazy val so that close() can check whether
+  // the connection was ever initialized without triggering initialization.
+  @volatile private var connection: org.apache.hadoop.hbase.client.Connection = null
+
+  private def getConnection(): org.apache.hadoop.hbase.client.Connection = {
+    if (connection == null) {
+      synchronized {
+        if (connection == null) {
+          connection = ConnectionFactory.createConnection(conf)
+        }
+      }
+    }
+    connection
+  }
 
   def close(): Unit = {
     if (connection != null && !connection.isClosed) connection.close()
@@ -35,7 +47,7 @@ class HBaseClient(zookeeperQuorum: String, zookeeperPort: Int, tableName: String
 
   def getCustomerFeatures(customerId: String): Option[CustomerFeatures] = {
     Try {
-      val table = connection.getTable(TableName.valueOf(tableName))
+      val table = getConnection().getTable(TableName.valueOf(tableName))
       try {
         val rowKey = s"${customerId.hashCode.abs % 1000}_$customerId"
         val get = new Get(Bytes.toBytes(rowKey))

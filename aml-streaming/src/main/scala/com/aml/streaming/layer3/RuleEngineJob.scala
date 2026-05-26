@@ -21,9 +21,8 @@ import scala.io.Source
  */
 object RuleEngineJob {
 
-  // Cached rule engine with periodic refresh
-  @volatile private var cachedRuleEngine: RuleEngine = _
-  @volatile private var lastRefreshMs: Long = 0L
+  // Cached rule engine with periodic refresh (single volatile pair avoids TOCTOU race)
+  @volatile private var cachedState: (RuleEngine, Long) = _
 
   // Cached sanctions screener
   @volatile private var cachedScreener: SanctionsScreener = _
@@ -31,11 +30,21 @@ object RuleEngineJob {
   private def getRuleEngine(config: AppConfig): RuleEngine = {
     val now = System.currentTimeMillis()
     val refreshIntervalMs = config.ruleEngine.refreshIntervalSeconds * 1000L
-    if (cachedRuleEngine == null || (now - lastRefreshMs) > refreshIntervalMs) {
-      cachedRuleEngine = RuleEngine.loadFromYaml(config.ruleEngine.ruleStorePath)
-      lastRefreshMs = now
+    val state = cachedState
+    if (state == null || (now - state._2) > refreshIntervalMs) {
+      synchronized {
+        val state2 = cachedState
+        if (state2 == null || (now - state2._2) > refreshIntervalMs) {
+          val engine = RuleEngine.loadFromYaml(config.ruleEngine.ruleStorePath)
+          cachedState = (engine, now)
+          engine
+        } else {
+          state2._1
+        }
+      }
+    } else {
+      state._1
     }
-    cachedRuleEngine
   }
 
   private def getSanctionsScreener(config: AppConfig): SanctionsScreener = {

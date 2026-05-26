@@ -50,7 +50,7 @@ object RuleLoader {
     if (node.isArray) {
       node.elements().asScala.map(_.asText()).toList
     } else if (node.isNumber) {
-      BigDecimal(node.doubleValue())
+      BigDecimal(node.decimalValue())
     } else {
       node.asText()
     }

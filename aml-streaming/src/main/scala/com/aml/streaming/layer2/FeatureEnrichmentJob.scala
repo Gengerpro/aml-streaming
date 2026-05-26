@@ -108,6 +108,10 @@ object FeatureEnrichmentJob {
     val hbasePort = config.hbase.zookeeperPort
     val hbaseTable = config.hbase.tableName
 
+    // Create a single HBaseClient instance to be shared across all partitions
+    // on each executor, avoiding the connection storm from creating one per customer per micro-batch.
+    val hbaseClient = new HBaseClient(hbaseQuorum, hbasePort, hbaseTable)
+
     val enriched = txns
       .select(
         col("txnId"),
@@ -122,7 +126,7 @@ object FeatureEnrichmentJob {
       .as[RawTransaction]
       .groupByKey(_.customerId)
       .flatMapGroupsWithState(OutputMode.Append, GroupStateTimeout.NoTimeout)(
-        (customerId, txns, state) => updateState(customerId, txns, state, hbaseQuorum, hbasePort, hbaseTable)
+        (customerId, txns, state) => updateState(customerId, txns, state, hbaseClient)
       )
 
     val query = enriched
@@ -143,9 +147,7 @@ object FeatureEnrichmentJob {
     customerId: String,
     txns: Iterator[RawTransaction],
     state: GroupState[TxnAggState],
-    hbaseQuorum: String,
-    hbasePort: Int,
-    hbaseTable: String
+    hbaseClient: HBaseClient
   ): Iterator[EnrichedTransaction] = {
 
     // Evict stale state (no activity for 2x the largest window)
@@ -174,12 +176,7 @@ object FeatureEnrichmentJob {
     val customerFeatures = if (isBypass) {
       None // Skip HBase for bypass lane - large CTR transactions don't need enrichment
     } else {
-      val hbaseClient = new HBaseClient(hbaseQuorum, hbasePort, hbaseTable)
-      try {
-        hbaseClient.getCustomerFeatures(customerId)
-      } finally {
-        hbaseClient.close()
-      }
+      hbaseClient.getCustomerFeatures(customerId)
     }
 
     val riskLevel = customerFeatures.map(_.riskLevel).getOrElse("UNKNOWN")
