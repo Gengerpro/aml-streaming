@@ -3,7 +3,7 @@ package com.aml.streaming.layer2
 import com.aml.common.config.AppConfig
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout}
+import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.types._
 
 // Domain case classes used for stateful mapGroupsWithState processing
@@ -106,8 +106,7 @@ object FeatureEnrichmentJob {
       )
       .as[RawTransaction]
       .groupByKey(_.customerId)
-      .mapGroupsWithState(GroupStateTimeout.NoTimeout)(updateState)
-      .flatMap(identity)
+      .flatMapGroupsWithState(OutputMode.Append, GroupStateTimeout.NoTimeout)(updateState)
 
     val query = enriched
       .selectExpr("to_json(struct(*)) AS value")

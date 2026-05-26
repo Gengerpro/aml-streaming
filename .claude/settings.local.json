@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mvn clean *)",
+      "Bash(mvn *)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git *)",
+      "Bash(java *)",
+      "Bash(chmod +x *)"
+    ]
+  }
+}
