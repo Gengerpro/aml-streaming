@@ -161,7 +161,7 @@ object RuleEngineJob {
           alertType = AlertType.CTR,
           severity = Severity.HIGH,
           ruleId = "CTR-001",
-          ruleDesc = s"Auto-CTR: Large transaction $${data.getOrElse("amountUsd", "N/A")} bypass lane",
+          ruleDesc = s"Auto-CTR: Large transaction ${data.getOrElse("amountUsd", "N/A")} bypass lane",
           score = 1.0f,
           status = AlertStatus.NEW,
           createdAt = now,

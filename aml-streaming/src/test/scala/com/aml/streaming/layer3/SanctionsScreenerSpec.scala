@@ -15,20 +15,20 @@ class SanctionsScreenerSpec extends AnyFlatSpec with Matchers {
   "SanctionsScreener" should "detect exact match" in {
     val result = screener.screen("AL QAIDA")
     result.isHit shouldBe true
-    result.get.matchedName shouldBe "AL QAIDA"
-    result.get.similarity shouldBe 1.0
+    result.matchResult.get.matchedName shouldBe "AL QAIDA"
+    result.matchResult.get.similarity shouldBe 1.0
   }
 
-  it should "detect fuzzy match (case insensitive)" in {
+  it should "detect fuzzy match with similar spelling" in {
     val result = screener.screen("al qaeda")
     result.isHit shouldBe true
-    result.get.similarity should be >= 0.85
+    result.matchResult.get.similarity should be >= 0.85
   }
 
-  it should "detect fuzzy match with slight variation" in {
+  it should "detect fuzzy match with case variation" in {
     val result = screener.screen("Taleban")
     result.isHit shouldBe true
-    result.get.matchedName shouldBe "TALIBAN"
+    result.matchResult.get.matchedName shouldBe "TALIBAN"
   }
 
   it should "not match unrelated names" in {
@@ -51,9 +51,10 @@ class SanctionsScreenerSpec extends AnyFlatSpec with Matchers {
     result.isHit shouldBe true
   }
 
-  it should "detect fuzzy bank name" in {
-    val result = screener.screen("Bank Sepah International")
+  it should "detect fuzzy bank name with typo" in {
+    val result = screener.screen("BANK SEPAH")
     result.isHit shouldBe true
+    result.matchResult.get.matchedName shouldBe "BANK SEPAH"
   }
 
   "BloomFilterManager" should "add and check names" in {

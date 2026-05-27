@@ -11,9 +11,12 @@ class RuleEngineSpec extends AnyFlatSpec with Matchers {
 
   "RuleLoader" should "load rules from YAML" in {
     val rules = RuleLoader.loadRules(rulesPath)
-    rules.size shouldBe 2
+    rules.size shouldBe 5
     rules.head.id shouldBe "CTR-001"
     rules(1).id shouldBe "SAR-001"
+    rules(2).id shouldBe "SAR-002"
+    rules(3).id shouldBe "SAR-003"
+    rules(4).id shouldBe "SAR-004"
   }
 
   "ConditionEvaluator" should "evaluate GTE condition" in {

@@ -2,6 +2,7 @@ package com.aml.service.case_mgt;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -40,10 +41,10 @@ public class CaseController {
         String customerId = request.get("customerId") != null ? request.get("customerId").toString() : null;
         String title = request.get("title") != null ? request.get("title").toString() : null;
         if (customerId == null || customerId.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "customerId is required"));
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", "customerId is required"));
         }
         if (title == null || title.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "title is required"));
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", "title is required"));
         }
         return ResponseEntity.ok(caseService.createCase(
             customerId,
@@ -61,7 +62,7 @@ public class CaseController {
             @RequestBody Map<String, String> request) {
         String assignee = request.get("assignee");
         if (assignee == null || assignee.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "assignee is required"));
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", "assignee is required"));
         }
         return ResponseEntity.ok(caseService.assignCase(caseId, assignee));
     }
@@ -84,7 +85,7 @@ public class CaseController {
             @RequestBody Map<String, String> request) {
         String reason = request.get("reason");
         if (reason == null || reason.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "reason is required"));
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", "reason is required"));
         }
         return ResponseEntity.ok(caseService.escalateCase(caseId, reason));
     }

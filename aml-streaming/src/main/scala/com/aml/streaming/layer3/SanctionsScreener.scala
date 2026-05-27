@@ -21,9 +21,14 @@ class SanctionsScreener(
 ) {
 
   def screen(name: String): ScreeningResult = {
-    // Phase 1: Bloom Filter fast check
+    // Phase 1: Bloom Filter fast check using bigrams for fuzzy tolerance
     val normalized = normalize(name)
-    if (!bloomFilter.mightContain(normalized)) {
+    if (normalized.length < 2) {
+      return ScreeningResult(isHit = false, None)
+    }
+    val bigrams = SanctionsScreener.bigrams(normalized)
+    val mightContain = bigrams.exists(b => bloomFilter.mightContain(b))
+    if (!mightContain) {
       // Bloom Filter says definitely not in set - skip expensive fuzzy matching
       return ScreeningResult(isHit = false, None)
     }
@@ -100,13 +105,22 @@ object SanctionsScreener {
       .replaceAll("\\s+", " ")
   }
 
+  /** Generate character bigrams from a string for fuzzy bloom filter matching. */
+  def bigrams(s: String): List[String] = {
+    if (s.length < 2) List(s)
+    else (0 until s.length - 1).map(i => s.substring(i, i + 2)).toList
+  }
+
   def create(sanctionedNames: List[String]): SanctionsScreener = {
     val bloomFilter = BloomFilter.create[CharSequence](
       Funnels.stringFunnel(StandardCharsets.UTF_8),
-      sanctionedNames.size * 10,
+      sanctionedNames.size * 50,
       0.001
     )
-    sanctionedNames.foreach(name => bloomFilter.put(normalize(name)))
+    // Store bigrams instead of full strings for fuzzy tolerance
+    sanctionedNames.foreach { name =>
+      bigrams(normalize(name)).foreach(bloomFilter.put)
+    }
     new SanctionsScreener(sanctionedNames, bloomFilter)
   }
 }

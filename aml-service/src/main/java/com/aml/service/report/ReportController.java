@@ -2,6 +2,7 @@ package com.aml.service.report;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -35,10 +36,10 @@ public class ReportController {
         String customerId = request.get("customerId");
         String alertId = request.get("alertId");
         if (customerId == null || customerId.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "customerId is required"));
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", "customerId is required"));
         }
         if (alertId == null || alertId.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "alertId is required"));
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", "alertId is required"));
         }
         return ResponseEntity.ok(reportService.generateCtrReport(
             alertId,
@@ -54,10 +55,10 @@ public class ReportController {
         String customerId = request.get("customerId");
         String alertId = request.get("alertId");
         if (customerId == null || customerId.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "customerId is required"));
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", "customerId is required"));
         }
         if (alertId == null || alertId.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "alertId is required"));
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", "alertId is required"));
         }
         return ResponseEntity.ok(reportService.generateSarReport(
             alertId,
@@ -85,7 +86,7 @@ public class ReportController {
             @RequestBody Map<String, String> request) {
         String status = request.get("status");
         if (status == null || status.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "status is required"));
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", "status is required"));
         }
         return ResponseEntity.ok(reportService.updateSubmissionStatus(
             reportId,
